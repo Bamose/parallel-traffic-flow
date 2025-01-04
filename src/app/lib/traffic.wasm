@@ -1,0 +1,59 @@
+let instance: WebAssembly.Instance | null = null;
+let memoryPositions: Float32Array | null = null;
+let memorySpeeds: Float32Array | null = null;
+
+interface Exports {
+  memory: WebAssembly.Memory;
+  _init_simulation: (num_vehicles: number, length: number) => void;
+  _step_simulation: () => void;
+  _get_positions: (positionsPtr: number, speedsPtr: number, length: number) => void;
+  _malloc: (size: number) => number;
+}
+
+const NUM_VEHICLES = 10000;
+const ROAD_LENGTH = 1000.0;
+
+export async function initSimulationModule(): Promise<void> {
+  if (instance) return;
+
+  const response = await fetch('/wasm/traffic.wasm');
+  const buffer = await response.arrayBuffer();
+  
+  const wasmModule = await WebAssembly.instantiate(buffer, {
+    env: {
+      // environment imports if needed
+    }
+  });
+
+  instance = wasmModule.instance;
+
+  const exports = instance.exports as unknown as Exports;
+
+  // Allocate memory for positions and speeds
+  const positionsPtr = exports._malloc(NUM_VEHICLES * 4);
+  const speedsPtr = exports._malloc(NUM_VEHICLES * 4);
+
+  memoryPositions = new Float32Array(exports.memory.buffer, positionsPtr, NUM_VEHICLES);
+  memorySpeeds = new Float32Array(exports.memory.buffer, speedsPtr, NUM_VEHICLES);
+
+  exports._init_simulation(NUM_VEHICLES, ROAD_LENGTH);
+}
+
+export function stepSimulation(): void {
+  if (!instance) return;
+  const exports = instance.exports as unknown as Exports;
+  exports._step_simulation();
+}
+
+export function getPositions(): { positions: Float32Array; speeds: Float32Array } {
+  if (!instance || !memoryPositions || !memorySpeeds) {
+    return { positions: new Float32Array(0), speeds: new Float32Array(0) };
+  }
+  const exports = instance.exports as unknown as Exports;
+  exports._get_positions(
+    memoryPositions.byteOffset,
+    memorySpeeds.byteOffset,
+    NUM_VEHICLES
+  );
+  return { positions: memoryPositions.slice(), speeds: memorySpeeds.slice() };
+}

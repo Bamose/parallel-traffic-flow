@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
+    "build:workers": "tsc workers/simulation-worker.ts --outDir workers --esModuleInterop --strict",
     "start": "next start",
     "lint": "next lint"
   },
